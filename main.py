@@ -29,14 +29,14 @@ y = iris.target
 epsilon = 4 #ms
 beta = 250
 hidden_thresh = 0.9   # pre
-delta_t = 1 # 1ms
+delta_t = 1.0 # 1ms
 mu = 0.0005
 H = torch.randn(10,1500)
-output_thresh = 0.25 * H
+output_thresh = 0.25
 U = 0
 
 # Create the Network
-network = Network()
+network = Network(dt=delta_t)
 
 # Create and add input, hidden and output layers.
 input_layer = Input(n=4, traces=True)
@@ -75,8 +75,7 @@ network.add_connection(
 hidden_output = Connection(
     source=hidden_layer,
     target=output_layer,
-    w=0, # TODO: USE UPDATED WEIGHTS FROM UPDATE RULE - DECLARE A GLOBAL SELF.WEIGHTS
-    update_rule=BPSTDP) #uses wmax instead of w
+    update_rule=PostPre) #uses wmax instead of w
 
 network.add_connection(
     connection=hidden_output, source="Hidden", target="Output"
@@ -96,9 +95,50 @@ network.add_connection(
 #
 # recurrent_output_conn = network.Connection()
 
-pipeline = BasePipeline(network, output="Output", time=1, delta=delta_t)
+#pipeline = BasePipeline(network, output="Output", time=1, delta=delta_t)
 
-while True:
-    pipeline.step()
-    if pipeline.done == True:
-        pipeline._reset()
+#while True:
+ #   pipeline.step()
+  #  if pipeline.done == True:
+   #     pipeline._reset()
+
+# Create and add input and output layer monitors.
+in_monitor = Monitor(
+    obj=input_layer,
+    state_vars=("s",),  # Record spikes and voltages.
+    time=500,  # Length of simulation (if known ahead of time).
+)
+
+hid_monitor = Monitor(
+    obj=hidden_layer,
+    state_vars=("s", "v"),  # Record spikes and voltages.
+    time=500,  # Length of simulation (if known ahead of time).
+)
+
+out_monitor = Monitor(
+    obj=output_layer,
+    state_vars=("s", "v"),  # Record spikes and voltages.
+    time=500,  # Length of simulation (if known ahead of time).
+)
+
+network.add_monitor(monitor=in_monitor, name="Input")
+network.add_monitor(monitor=hid_monitor, name="Hidden")
+network.add_monitor(monitor=out_monitor, name="Output")
+
+# Create input spike data, where each spike is distributed according to Bernoulli(0.1).
+input_data = torch.bernoulli(0.1 * torch.ones(500, input_layer.n)).byte()
+inputs = {"Input": input_data}
+
+# Simulate network on input data.
+network.run(inputs=inputs, time=500)
+
+# Retrieve and plot simulation spike, voltage data from monitors.
+spikes = {
+    "Input": in_monitor.get("s"), "Hidden": hid_monitor.get("s")
+}
+voltages = {"Hidden": hid_monitor.get("v")}
+
+plt.ioff()
+plot_spikes(spikes)
+plot_voltages(voltages, plot_type="line")
+plt.show()

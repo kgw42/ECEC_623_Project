@@ -5,6 +5,7 @@ Date: May 5, 2021
 SNN with IF Neurons for Iris Dataset.
 """
 
+import tensorflow as tf
 import torch
 import matplotlib.pyplot as plt
 from bindsnet.network import Network
@@ -14,6 +15,7 @@ from bindsnet.network.monitors import Monitor
 from bindsnet.analysis.plotting import plot_spikes, plot_voltages
 from bindsnet.learning import PostPre
 from BPSTDP import BPSTDP
+from sklearn import preprocessing
 from bindsnet.pipeline import BasePipeline
 
 from sklearn import datasets
@@ -21,8 +23,14 @@ import numpy as np
 
 # import the dataset
 iris = datasets.load_iris()
-X = iris.data[:, :4]  # Take the first 4 features (Length and width of both petal and sepal)
+X = iris.data # Take the first 4 features (Length and width of both petal and sepal)
 y = iris.target
+
+norm_X = preprocessing.normalize(X)
+
+
+print(X, type(X))
+print(y, type(y))
 
 # Parameters
 
@@ -61,8 +69,10 @@ Input to output layer uses
 input_hidden = Connection(
     source=input_layer,
     target=hidden_layer,
-    w=0 * torch.randn(input_layer.n, hidden_layer.n),  # Initial weights - what did the paper use for initial weights e.g. w = 0.1 * size of the connection, i.e. torch.ones(4,30)
+    # w= torch.normal(mean=0.0, std=1) # w= torch.normal(mean=torch.arange(1., 11.), std=torch.arange(1, 0, -0.1))  # Initial weights - what did the paper use for initial weights e.g. w = 0.1 * size of the connection, i.e. torch.ones(4,30)
+    w = torch.randn(input_layer.n, hidden_layer.n)
 ) # uses wmax instead of w
+
 
 # nu parameter is the learning rate
 # norm - constant weight normalization
@@ -106,19 +116,19 @@ network.add_connection(
 in_monitor = Monitor(
     obj=input_layer,
     state_vars=("s",),  # Record spikes and voltages.
-    time=500,  # Length of simulation (if known ahead of time).
+    time=150,  # Length of simulation (if known ahead of time).
 )
 
 hid_monitor = Monitor(
     obj=hidden_layer,
     state_vars=("s", "v"),  # Record spikes and voltages.
-    time=500,  # Length of simulation (if known ahead of time).
+    time=150,  # Length of simulation (if known ahead of time).
 )
 
 out_monitor = Monitor(
     obj=output_layer,
     state_vars=("s", "v"),  # Record spikes and voltages.
-    time=500,  # Length of simulation (if known ahead of time).
+    time=150,  # Length of simulation (if known ahead of time).
 )
 
 network.add_monitor(monitor=in_monitor, name="Input")
@@ -126,11 +136,13 @@ network.add_monitor(monitor=hid_monitor, name="Hidden")
 network.add_monitor(monitor=out_monitor, name="Output")
 
 # Create input spike data, where each spike is distributed according to Bernoulli(0.1).
-input_data = torch.bernoulli(0.1 * torch.ones(500, input_layer.n)).byte()
+print(torch.from_numpy(norm_X))
+input_data = torch.bernoulli(torch.from_numpy(norm_X)).byte()
+#input_data = torch.bernoulli(0.1 * torch.ones(500, input_layer.n)).byte()
 inputs = {"Input": input_data}
 
 # Simulate network on input data.
-network.run(inputs=inputs, time=500)
+network.run(inputs=inputs, time=150)
 
 # Retrieve and plot simulation spike, voltage data from monitors.
 spikes = {
@@ -142,3 +154,9 @@ plt.ioff()
 plot_spikes(spikes)
 plot_voltages(voltages, plot_type="line")
 plt.show()
+
+"""'
+TODO
+- Figure out the correct connections. A. Input to Hidden B. Hidden to Output
+- BPSTDP Rule
+"""

@@ -439,6 +439,7 @@ X_train, X_test, y_train, y_test = train_test_split(iris.data, iris.target, test
 #y = iris.target
 
 norm_train_X = preprocessing.normalize(X_train)
+norm_test_X = preprocessing.normalize(X_test)
 
 
 #print(X, type(X))
@@ -497,6 +498,7 @@ hidden_output = Connection(
     source=hidden_layer,
     target=output_layer,
     w=torch.randn(hidden_layer.n, output_layer.n),
+    nu=4e-3,
     update_rule=PostPre
 )
 
@@ -580,6 +582,23 @@ for i, sample in enumerate(norm_train_X):
 
     # add to the encoded input list along with the input layer name
     encoded_train_inputs.append({"Label" : encoded_img_label, "Inputs" : encoded_img_input})
+
+encoded_test_inputs = []
+
+# loop through encode each image type and store into a list of encoded images
+for i, sample in enumerate(norm_test_X):
+
+    # encode the image
+    encoded_img = encoder(torch.flatten(torch.from_numpy(sample)))
+
+    # encoded image input for the network
+    encoded_img_input = {input_layer_name: encoded_img}
+
+    # encoded image label
+    encoded_img_label = y_train[i]
+
+    # add to the encoded input list along with the input layer name
+    encoded_test_inputs.append({"Label" : encoded_img_label, "Inputs" : encoded_img_input})
 
 
 
@@ -691,3 +710,57 @@ for idx in range(assignments.numel()):
         "Proportions:", proportions[idx],
         "Rates:", rates[idx]
     )
+
+num_correct = 0
+
+log_messages = True
+
+# disable training mode
+network.train(False)
+
+# loop through each test example and record performance
+for sample in encoded_test_inputs:
+
+    # get the label for the current image
+    labels[0] = sample["Label"]
+
+    ### Step 1: Run the network with the provided inputs ###
+    network.run(inputs=sample["Inputs"], time=time)
+
+    ### Step 2: Get the spikes produced at the output layer ###
+    spike_record[0] = network.monitors[lif_layer_name].get("s").view(time, lif_neurons)
+
+    ### Step 3: ###
+
+    # Assign labels to the neurons based on highest average spiking activity.
+    # Returns a Tuple of class assignments, per-class spike proportions, and per-class firing rates
+    # Return Type: Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+    assignments, proportions, rates = assign_labels(spike_record, labels, n_classes, rates)
+
+    ### Step 4: Classify data based on the neuron (label) with the highest average spiking activity ###
+
+    # Classify data with the label with highest average spiking activity over all neurons.
+    all_activity_pred = all_activity(spike_record, assignments, n_classes)
+
+    ### Step 5: Classify data based on the neuron (label) with the highest average spiking activity
+    ###         weighted by class-wise proportion ###
+    proportion_pred = proportion_weighting(spike_record, assignments, proportions, n_classes)
+
+    ### Update Accuracy
+    num_correct += 1 if (labels.numpy()[0] == all_activity_pred.numpy()[0]) else 0
+
+    ######## Display Information ########
+    if log_messages:
+        print("Actual Label:", labels.numpy(), "|", "Predicted Label:", all_activity_pred.numpy(), "|",
+              "Proportionally Predicted Label:", proportion_pred.numpy())
+
+        print("Neuron Label Assignments:")
+        for idx in range(assignments.numel()):
+            print(
+                "\t Output Neuron[", idx, "]:", assignments[idx],
+                "Proportions:", proportions[idx],
+                "Rates:", rates[idx]
+            )
+        print("\n")
+    #####################################
+print("Accuracy:", num_correct / len(encoded_test_inputs))

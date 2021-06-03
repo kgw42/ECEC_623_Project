@@ -20,6 +20,8 @@ from bindsnet.pipeline import BasePipeline
 from sklearn import datasets
 import numpy as np
 
+from testEnv import SNNetwork
+
 
 import tempfile
 from typing import Dict, Optional, Type, Iterable

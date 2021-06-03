@@ -4,9 +4,11 @@ Date: May 5, 2021
 
 SNN with IF Neurons for Iris Dataset.
 """
-
+import pandas as pd
+import seaborn as sns
 import tensorflow as tf
 import torch
+from torch import optim
 import matplotlib.pyplot as plt
 from bindsnet.network import Network
 from bindsnet.network.nodes import Input, LIFNodes, IFNodes
@@ -261,7 +263,7 @@ class SNNetwork(torch.nn.Module):
                        'Output': [0 for z in range(3)]}
 
         for t in range(timesteps):
-            print("Step Time: {}".format(t))
+            #print("Step Time: {}".format(t))
             # Get input to all layers (synchronous mode).
             current_inputs = {}
             if not one_step:
@@ -269,7 +271,7 @@ class SNNetwork(torch.nn.Module):
 
             for l in self.layers:
                 # Update each layer of nodes.
-                print("Layer {}".format(l))
+                #print("Layer {}".format(l))
                 if l in inputs:
                     print()
                     # Updates the current inputs
@@ -280,11 +282,11 @@ class SNNetwork(torch.nn.Module):
 
 
                 if one_step:
-                    print("Here")
+                    #print("Here")
                     # Get input to this layer (one-step mode).
                     current_inputs.update(self._get_inputs(layers=[l]))
-                print("CURRENT INPUT")
-                print(current_inputs)
+                #print("CURRENT INPUT")
+                #print(current_inputs)
                 self.layers[l].forward(x=current_inputs[l])
 
                 # Inject voltage to neurons.
@@ -312,21 +314,36 @@ class SNNetwork(torch.nn.Module):
                 #print(output_spikes[ep])
                 sum_spikes = [x + y for x,y in zip(sum_spikes, output_spikes[ep])]
 
-            print("OUTPUT SUM AT T", sum_spikes[0])
+            #print("OUTPUT SUM AT T", sum_spikes[0])
 
             # Check for target neurons  -- and apply equation 16
             if any(sum_spikes[0].numpy()):
-                print("Target Neuron found")
+                #print("Target Neuron found")
 
                 target_neurons = ((sum_spikes[0] >= 1).nonzero(as_tuple=True)[0])
                 silent_neurons = ((sum_spikes[0] == 0).nonzero(as_tuple=True)[0])
 
                 for targ_neur in target_neurons:
-                    if output_spikes[t][targ_neur] == False or output_spikes[t][targ_neur] == 0:
+                    print(targ_neur)
+                    #print(output_spikes[t])
+                    print(output_spikes[t][0][targ_neur])
+                    try:
+                        search = tf.math.equal(output_spikes[t][targ_neur], torch.zeros(1, dtype=torch.bool)[0])
+                        print("S", search)
+                    except:
+                        search = tf.math.equal(output_spikes[t][0][targ_neur], torch.zeros(1, dtype=torch.bool)[0])
+                        print("Mine", torch.zeros(1, dtype=torch.bool)[0])
+                        print(str(output_spikes[t][0][targ_neur]).lstrip())
+                        print("S", search)
+
+
+                    if search:
+                        print("Here")
                         error[targ_neur] = 1
 
+
                 for sil_neur in silent_neurons:
-                    if output_spikes[t][sil_neur] == True or output_spikes[t][sil_neur] == 1:
+                    if output_spikes[t][0][sil_neur] == True:
                         error[sil_neur] = -1
 
             # Weight adaptation for hidden layer
@@ -344,7 +361,7 @@ class SNNetwork(torch.nn.Module):
                 #print(output_spikes[ep])
                 sum_spikes_hid = [x + y for x,y in zip(sum_spikes_hid, hidden_spikes[ep])]
 
-            print("HIDDEN SUM AT T", sum_spikes_hid[0])
+            #print("HIDDEN SUM AT T", sum_spikes_hid[0])
 
             # Check for target hidden neurons  -- and apply equation 16
             if any(sum_spikes_hid[0].numpy()):
@@ -352,9 +369,9 @@ class SNNetwork(torch.nn.Module):
 
                 # Already hadles the derivative
                 for h_targ_neur in hid_tar_neurons:
-                    print(h_targ_neur)
-                    print(self.connections[('Hidden', 'Output')].w[h_targ_neur])
-                    print(torch.FloatTensor(error))
+                    #print(h_targ_neur)
+                    #print(self.connections[('Hidden', 'Output')].w[h_targ_neur])
+                    #print(torch.FloatTensor(error))
                     error_hid[h_targ_neur] = torch.matmul(self.connections[('Hidden', 'Output')].w[h_targ_neur], torch.FloatTensor(error).reshape(-1,1))
 
             input_spikes[t] = self.layers["Input"].s
@@ -369,13 +386,13 @@ class SNNetwork(torch.nn.Module):
             for ep in range(t - diff, t + 1):
                 sum_spikes_in = [x + y for x, y in zip(sum_spikes_in, input_spikes[ep])]
 
-            print("INPUT SUM AT T", sum_spikes_in[0])
+            #("INPUT SUM AT T", sum_spikes_in[0])
 
-            print('____________')
-            print(error_hid)
+            #print('____________')
+            #print(error_hid)
 
-            print("Spike Train")
-            print(spike_train)
+            #print("Spike Train")
+            #print(spike_train)
 
             # weight update - output and input synapses
             #self.connections[('Hidden', 'Output')].w += torch.matmul(torch.FloatTensor(sum_spikes_hid), torch.FloatTensor(error)) * mu
@@ -384,13 +401,13 @@ class SNNetwork(torch.nn.Module):
                 sum_spikes_in[0].type(torch.FloatTensor).reshape(-1, 1), torch.FloatTensor(error_hid).reshape(1, -1)) * mu
 
 
-            print("Spike Train")
-            print(spike_train)
+            #print("Spike Train")
+            #print(spike_train)
 
 
             # Run synapse updates.
             for c in self.connections:
-                print(c)
+                #print(c)
                 self.connections[c].update(
                     mask=masks.get(c, None), learning=self.learning, **kwargs
                 )
@@ -435,8 +452,9 @@ class SNNetwork(torch.nn.Module):
 iris = datasets.load_iris()
 X_train, X_test, y_train, y_test = train_test_split(iris.data, iris.target, test_size=0.33, random_state=42)
 
-#X = iris.data # Take the first 4 features (Length and width of both petal and sepal)
-#y = iris.target
+irisi = pd.DataFrame(X_train, columns =['SepalLengthCm', 'SepalWidthCm', 'Petal width',  'Petal Height'])
+irisi.plot(kind="scatter", x="SepalLengthCm", y="SepalWidthCm")
+plt.show()
 
 norm_train_X = preprocessing.normalize(X_train)
 norm_test_X = preprocessing.normalize(X_test)
@@ -457,7 +475,7 @@ output_thresh = 0.025
 U = 0
 
 # Create the Network
-network = Network(dt=delta_t)
+network = SNNetwork(dt=delta_t)
 
 # Create and add input, hidden and output layers.
 input_layer = Input(n=4, traces=True)
@@ -497,14 +515,28 @@ network.add_connection(
 hidden_output = Connection(
     source=hidden_layer,
     target=output_layer,
-    w=torch.randn(hidden_layer.n, output_layer.n),
     nu=4e-3,
-    update_rule=PostPre
+    wmin=-1,
+    wmax=1,
+    update_rule=WeightDependentPostPre
 )
-
+# w=torch.randn(hidden_layer.n, output_layer.n),
 network.add_connection(
     connection=hidden_output, source="Hidden", target="Output"
 )
+
+# Initialize optimizer
+optimizer = optim.SGD(network.parameters(), lr=5e-5, momentum=0.9)
+
+# Print model's state_dict
+print("Model's state_dict:")
+for param_tensor in network.state_dict():
+    print(param_tensor, "\t", network.state_dict()[param_tensor].size())
+
+# Print optimizer's state_dict
+print("Optimizer's state_dict:")
+for var_name in optimizer.state_dict():
+    print(var_name, "\t", optimizer.state_dict()[var_name])
 
 time = 150
 dt = 1
@@ -595,7 +627,7 @@ for i, sample in enumerate(norm_test_X):
     encoded_img_input = {input_layer_name: encoded_img}
 
     # encoded image label
-    encoded_img_label = y_train[i]
+    encoded_img_label = y_test[i]
 
     # add to the encoded input list along with the input layer name
     encoded_test_inputs.append({"Label" : encoded_img_label, "Inputs" : encoded_img_input})
@@ -607,7 +639,7 @@ for i, sample in enumerate(norm_test_X):
 #inputs = {"Input": input_data}
 
 # iterate for epochs
-epochs = 100
+epochs = 10
 
 weight_history = None
 num_correct = 0.0
@@ -622,12 +654,11 @@ plot_weights = True
 ###############
 input_neurons = 4
 
-
 for step in range(epochs):
     for step, sample in enumerate(encoded_train_inputs):
 
         # get the label for the current image
-        labels[0] = y_train[step]
+        labels[0] = sample['Label']
 
         # randomly decide which output neuron should spike if more than one neuron corresponds to the class
         # choice will always be 0 if there is one neuron per output class
@@ -710,19 +741,19 @@ for idx in range(assignments.numel()):
         "Proportions:", proportions[idx],
         "Rates:", rates[idx]
     )
-
+torch.save(network, "model.h5")
 num_correct = 0
 
 log_messages = True
 
-# disable training mode
-network.train(False)
-
+network = torch.load("model.h5")
+network.eval()
+labels = torch.empty(1,dtype=torch.int)
 # loop through each test example and record performance
 for sample in encoded_test_inputs:
 
     # get the label for the current image
-    labels[0] = sample["Label"]
+    labels[0] = sample['Label']
 
     ### Step 1: Run the network with the provided inputs ###
     network.run(inputs=sample["Inputs"], time=time)

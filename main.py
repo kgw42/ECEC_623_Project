@@ -20,7 +20,7 @@ from bindsnet.pipeline import BasePipeline
 from sklearn import datasets
 import numpy as np
 
-from testEnv import SNNetwork
+from model import SNNetwork
 
 
 import tempfile
